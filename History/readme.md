@@ -10,5 +10,5 @@
 ## Important papers:
 
 Diffusion
-    [Diffusion Intro](https://arxiv.org/pdf/1503.03585)
-    [Diffusion jump UCBerk.](https://arxiv.org/pdf/2006.11239)
+    - [Diffusion Intro](https://arxiv.org/pdf/1503.03585)
+    - [Diffusion jump UCBerk.](https://arxiv.org/pdf/2006.11239)
