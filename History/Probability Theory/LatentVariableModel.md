@@ -5,7 +5,7 @@
 ### Intro: AutoEncoders:
 Learn to encode and reconstruct an image with a 'bottleneck', which is our latent-vector/latent-space variables
 
-- We we train our autoencoder, our Neural net is able to deconstruct and reconstruct images, however when we try to sample new images from our 'latent distribution', we get blurred and odd pixels (our space is unstructured)
+- When we train our autoencoder, our Neural net is able to deconstruct and reconstruct images, however when we try to sample new images from our 'latent distribution', we get blurred and odd pixels (our space is unstructured)
 
 - We want  need to guide our model to be aware of the dependencies between 'similar' images/classes of images
 
@@ -35,41 +35,25 @@ We can see how having a meaningful latent space in an autoencoder would allow us
 
 -------------------------------------------------------------------------------------
 
-## Defining our problem
+## Regular Autoencoders
 
-sources: 
-- [princeton](https://pillowlab.princeton.edu/teaching/statneuro2018/slides/notes16_LatentsAndEM.pdf)
+Regular autoencoders are able to find lower-dimensional 'manifolds' in our data, or find patterns that allow them to represent data in a latent-space, and reconstruct it.
 
-- [stanford](https://ermongroup.github.io/cs228-notes/learning/latent/)
+But...
+> They only worry about reconstructing data
+> Our latent space is inherintly unstructured: we cannot sample from it in any way
 
-So, we are able to define our KL divergence for Q(x), an approximation of P(x) with our understanding of KL divergence.
+## Probabilistic autoencoders
+- What if given an image, we could assign probabilities to it with our encoder, and sample from this distribution with our decoder?
+- Our model would learn to reconstruct image from sampling a range of values, rather than one value
+- This would allow us to sample from our 'stable' latent space, which would be a normal distribution: allowing us to know what values are true and not true!
 
-Let's go from defining our problem with a theoretical probability approach, and looking towards machine learning to solve our problems.
+Basically this is what we can do:
+1. Learn a mapping (neural network) p(z|x): probability of each latent variable z given x. We will learn the mean and standard deviation for each z_n
+2. Sample from each one of our z's with learned mean and standard deviation
+3. With these samples, generate a probability distribution for our pixel-space p(x|z)
+- We want to constrain p(z)'s (or p(z|x)'s) to be as close to a normal distribution with mean 0 and std. dev. 1 so our latent-space behaves well, and the model is forced to learn dynamic relationships between data (cat vs. dog vs. submarine --> why cat/dog's are similar!)
+- Similar to a regular autoencoder, we want our re-creations of the image to be as close as possible
 
-- We observe *D* from our continous high-dimensional distribution *X* (pixel PDF)
-- We have some latent variables that are high-level (continuous) descriptions of X such as emotional content
+![Example](latent-distributionz.png)
 
-1. We cannot sample from our probability distribution *X* of all possible images (x has p(x) probability of being real in *X*)
-2. We therefore need a stable (gaussian), lower-dimensional representation of *X*,
-which is P(Z)
-3. Now we only need to find P(Z|X), or the mapping of X onto Z such that the probability reflects the real probability or P(X)
-
-If we observe *D* we could use bayes theorem:
-
-    P(Z|X=D) = P(X=D|Z)P(Z)/(P(X=D))
-
-    where P(X=D) is ∫...∫ P(Z|X)P(Z)dz...dz_n 
-
-    this marginalization is intractable (cannot be solved)
-
-So, we need a surrogate: *Q(Z)*, where *Q* is an approximation of P(Z), which is the actual latent-distribution of X.
-
-    Q(Z) ~ p(Z|X=D)
-    Our distribution Q(Z) is approximating P(Z|X=D) under the observed data *D*
-
------------------
-
-### Sources:
-- [VAE-math-explained](https://www.youtube.com/watch?v=iwEzwTTalbg&ab_channel=UmarJamil)
-- [Wikipedia-Entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory))
-- [KL-Divergence-Explained](https://www.youtube.com/watch?v=KHVR587oW8I&ab_channel=ArtemKirsanov)
