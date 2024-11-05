@@ -1,4 +1,4 @@
-# Latent variable models
+# Basics of VAE
 
 > VAE's are a type of latent-variable model, and we will be using this probabilistic perspective throughout our generative AI journey!
 
