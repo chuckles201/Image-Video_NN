@@ -31,9 +31,10 @@ def train_VAE(d1,d2,latent,epochs,batch_size,data):
     model.to(device)
     
     # passing in parameters to optimizer
-    optimizer = torch.optim.AdamW(model.parameters(),lr=3e-4)
+    optimizer = torch.optim.AdamW(model.parameters(),lr=3e-4,weight_decay=1e-3,betas=[0.9,0.99])
     
     model.train()
+    
     # training loop
     for i in range(epochs):
         x = get_batch(data,batch_size,d1,d2)

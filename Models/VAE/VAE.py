@@ -11,6 +11,7 @@ d2 = 100
 class VariationalAutoEncoder(nn.Module):
     def __init__(self,d1 = d1, d2 = d2, latent_dimension = 56):
         super().__init__()
+        
         self.d1 = d1
         self.d2 = d2
         self.latentd = latent_dimension
@@ -18,30 +19,101 @@ class VariationalAutoEncoder(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
         
-        # encoder takes in B,C,H*W --> B,C,Out
-        self.h1 = nn.Linear(self.d1*self.d2*3, 300)
-        self.h2 = nn.Linear(300, 256)
-        self.h3 = nn.Linear(256, 128)
-        self.mu1 = nn.Linear(128, latent_dimension)
-        self.sigma1 = nn.Linear(128, latent_dimension)
+        # be able to add hidden dims...
+        modules = []
+        hidden_dims = [32,64,128,256,512,512] # extra for dim-reduction
         
-        # decoder
-        self.h4inv = nn.Linear(latent_dimension,128)
-        self.h3inv = nn.Linear(128,256)
-        self.h2inv = nn.Linear(256,300)
-        self.h1inv = nn.Linear(300,self.d1*self.d2*3)
+        # Encoder
+        # Conv2d takes in a dimension, outputs this dimension...
+        
+        '''Convolutional Layer (
+            Channels_in: how many input kernel
+            channels_out: how many kernels we will have (subkernels for each input)
+            kernel_size: how large our kernels do their scans, and end up
+            stride
+            padding)
+            
+            At end, we will have 512 2x2 feature-maps given 64x64 images to start'''
+        
+        in_channels = 3
+        for h in hidden_dims:
+            modules.append(
+                nn.Sequential(
+                    # convolutional layer
+                    nn.Conv2d(in_channels,h,kernel_size=3,stride=2,padding=1),
+                    # batchnorm for stablization
+                    nn.BatchNorm2d(h),
+                    # Non-linearity
+                    nn.LeakyReLU(),
+                )
+            )
+            
+            # setting last dim equal...
+            in_channels = h
+            
+        # just have a list of sequentials, unpack, and do in sequence!
+        self.encoder_modules = nn.Sequential(*modules)
+        
+        # multiply by 4 because of spacial dimensions.
+        self.l_mu = nn.Linear(6144,latent_dimension)
+        self.l_logvar = nn.Linear(6144,latent_dimension)
+        
+        '''
+        *Building Decoder*
+        Reverse our list, and create the inverse convolutional layers.
+        
+        Final layer is special: it has an added convolutional layer,
+        in order for us to be able to output 3 channels
+        
+        '''
+        modules = []
+        
+        hidden_dims.reverse()
+        
+        # kernel 3, stride 2, padding 1, output padding 1
+        for i in range(len(hidden_dims) - 1):
+            modules.append(
+                nn.Sequential(
+                    nn.ConvTranspose2d(hidden_dims[i],hidden_dims[i+1],
+                                       kernel_size=3,
+                                       stride=2,
+                                       padding=1,
+                                       output_padding=1),
+                nn.BatchNorm2d(hidden_dims[i+1]),
+                nn.LeakyReLU(),
+                )
+            )
+            
+        self.decoder_modules = nn.Sequential(*modules)
+        
+        
+        # first part of reconstruction
+        self.decoder_input = nn.Linear(latent_dimension,6144)
+        
+        # final layer to translate into color
+        self.final_adj = nn.AdaptiveAvgPool2d([self.d1,self.d2]) # need this for shapes!
+        self.final_layer = nn.Sequential(
+            nn.ConvTranspose2d(hidden_dims[-1],hidden_dims[-1],
+                               kernel_size=3,
+                               stride=2,
+                               padding=1,
+                               output_padding=1),
+            nn.BatchNorm2d(hidden_dims[-1]), # 2d over 4d input
+            nn.LeakyReLU(),
+            # make to shape of images match here!
+            nn.Conv2d(hidden_dims[-1],3,kernel_size=3,padding=1,stride=1), 
+            nn.Tanh(),
+        )
         
     def encoder(self,x):
         # encoding to latent vectors
-        h = self.relu(self.h1(x))
-        h = self.relu(self.h2(h))
-        h = self.relu(self.h3(h))
+        x = self.encoder_modules(x)
+        x = x.flatten(1) # flatten all dimensions starting at 1
         
-        # parameterizing z
-        mu = self.mu1(h)
-        sigma = self.sigma1(h)
+        mu = self.l_mu(x)
+        logvar = self.l_logvar(x)
         
-        return mu, sigma
+        return mu, logvar
     
     def reparameterization(self,mu,logvar):
         # sample from z, pass to decoder
@@ -53,18 +125,35 @@ class VariationalAutoEncoder(nn.Module):
         
     def decoder(self,x):
         # reconstructing sample from z
-        # B,C,in --> B,C,out
-        h = self.relu(self.h4inv(x))
-        h = self.relu(self.h3inv(h))
-        h = self.relu(self.h2inv(h))
-        out = self.sigmoid(self.h1inv(h)) # to constrain values
+        # B,in --> B,C,out
         
-        return out
+        # decodes a latent-vector...
+        x = self.decoder_input(x)
+        
+        x = x.view(x.shape[0],512,4,3) # B, C, kernel
+        
+        x = self.decoder_modules(x)
+        x = self.final_layer(x)
+        x = self.final_adj(x)
+        
+        return x
+    
+    def get_latent(self,x):
+        # get sampled latent vector for an image
+        # encoder
+        mu,logvar = self.encoder(x)
+        
+        # sampling
+        latent,mu,logvar = self.reparameterization(mu,logvar)
+
+        return latent, mu, logvar
     
     def forward(self,x):
-        assert(x.shape[2]*x.shape[3]*3 == self.d1*self.d2*3)
-        x = x.view(-1,self.d1*self.d2*3)
-        
+        # checking for shape errors
+        assert(self.d1*self.d2 == x.shape[-2]*x.shape[-1])
+        if x.dim() <= 3:
+            x = x.unsqueeze(0)
+
         # encoder
         mu,logvar = self.encoder(x)
         
@@ -72,8 +161,30 @@ class VariationalAutoEncoder(nn.Module):
         latent,mu,logvar = self.reparameterization(mu,logvar)
         
         # decoder
-        out = self.decoder(latent).view(-1,3,self.d1,self.d2)
-
+        out = self.decoder(latent)
+        
         return out, mu, logvar
     
+    
 
+    
+
+
+
+# IMAGES MUST BE 218,178
+def run_test():
+    test = torch.randn((3,218,178))
+    model = VariationalAutoEncoder(218,178,3)
+    out,mu,sigma = model(test)
+    print("***Results***")
+    print(out.shape,mu.shape,sigma.shape)
+    
+
+
+# TO-DO
+'''
+1. Understand importance of batchnorm 
+2. Implement residual connections?
+3. Reason better with conv. layers!
+
+'''
