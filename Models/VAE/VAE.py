@@ -18,6 +18,7 @@ class VariationalAutoEncoder(nn.Module):
         
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
         
         # be able to add hidden dims...
         modules = []
@@ -136,6 +137,8 @@ class VariationalAutoEncoder(nn.Module):
         x = self.final_layer(x)
         x = self.final_adj(x)
         
+        x = self.tanh(x)
+        
         return x
     
     def get_latent(self,x):
@@ -188,3 +191,7 @@ def run_test():
 3. Reason better with conv. layers!
 
 '''
+
+# our adaptive pool 256,192 --> 218,178
+# will take average by doing some kernel, same
+# as normal images..

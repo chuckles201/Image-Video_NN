@@ -7,14 +7,18 @@ import VAE
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # loss function: KL and reconstr.
-def loss_function(target,output,mu,logvar):
+# alpha is the percentage of KL we use vs. mse...
+def loss_function(target,output,mu,logvar,alpha=1,beta=1,pr=False):
     mse = F.mse_loss(output,target)
     
     # sigma and mu added across single sample, take mean acr batch
     # B,latent
-    KL = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - torch.exp(logvar), dim=-1),dim=0)
+    KL = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - torch.exp(logvar), dim=-1),dim=0) * alpha
     
-    return KL + mse
+    if pr == True:
+        print("KL/MSE ratio: ", ((KL*beta) / (mse*alpha)).item())
+    
+    return KL*beta + mse*alpha
     
 # getting a batch
 def get_batch(data,size,d1,d2):
@@ -22,10 +26,11 @@ def get_batch(data,size,d1,d2):
     # data is list of tensors
     ind = torch.randint(0,len(data),size=(size,),device=device).tolist()
     batch = torch.stack([data[i] for i in ind]).to(device=device)
+    
     return batch.view(size,3,d1,d2).to(device)
     
 
-def train_VAE(d1,d2,latent,epochs,batch_size,data):
+def train_VAE(d1,d2,latent,epochs,batch_size,data,alpha=1,beta=1):
     # initializing model
     model = VAE.VariationalAutoEncoder(d1,d2,latent)
     model.to(device)
@@ -43,7 +48,10 @@ def train_VAE(d1,d2,latent,epochs,batch_size,data):
         
         # going backward
         optimizer.zero_grad()
-        loss = loss_function(x,x_reconstructed,mu,logvar)
+        if i % 50 == 0:
+            loss = loss_function(x,x_reconstructed,mu,logvar,alpha,beta,pr=True)
+        else:
+            loss = loss_function(x,x_reconstructed,mu,logvar,alpha,beta,pr=False)
         loss.backward()
         optimizer.step()
         
